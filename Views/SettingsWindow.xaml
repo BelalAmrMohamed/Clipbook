@@ -1,0 +1,108 @@
+<Window x:Class="AdvancedClipboard.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Advanced Clipboard – Settings" Width="540" Height="720" MinHeight="480"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource BgBrush}">
+    <Window.Resources>
+        <Style x:Key="Section" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,18,0,6"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,2,0,6"/>
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,6,0,3"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="22,6,22,10">
+
+                <!-- Hotkeys -->
+                <TextBlock Text="Hotkeys" Style="{StaticResource Section}"/>
+                <TextBlock Text="Open clipboard panel" Style="{StaticResource Label}"/>
+                <TextBox x:Name="PanelHotkeyBox"/>
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="Win+V replaces Windows' own panel using a keyboard hook. Format example: Win+V, Ctrl+Shift+V, Ctrl+Alt+C."/>
+                <TextBlock Text="Fallback hotkey (also opens the panel; used if the one above cannot be registered)" Style="{StaticResource Label}"/>
+                <TextBox x:Name="FallbackHotkeyBox"/>
+                <TextBlock Text="Paste current clipboard as plain text" Style="{StaticResource Label}"/>
+                <TextBox x:Name="PlainHotkeyBox"/>
+
+                <!-- Pinned -->
+                <TextBlock Text="Pinned items" Style="{StaticResource Section}"/>
+                <TextBlock Style="{StaticResource Hint}" Text="You can pin as many items as you like. Pinned items never count against the limits below and are never deleted automatically."/>
+                <RadioButton x:Name="PinTop" Content="Show pinned items at the top of the history tab" GroupName="pin"/>
+                <RadioButton x:Name="PinBottom" Content="Show pinned items at the bottom of the history tab" GroupName="pin"/>
+                <RadioButton x:Name="PinTab" Content="Show pinned items in a separate “Pinned” tab" GroupName="pin"/>
+                <CheckBox x:Name="AutoPinNotes" Content="Automatically pin quick notes I write"/>
+
+                <!-- Temp -->
+                <TextBlock Text="Temporary history limits" Style="{StaticResource Section}"/>
+                <TextBlock Style="{StaticResource Hint}" Text="Applies to items that are not pinned. Use 0 for no limit. When a limit is reached, the oldest temporary items are removed first."/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/><ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/><ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0"><TextBlock Text="Max items" Style="{StaticResource Label}"/><TextBox x:Name="MaxItemsBox"/></StackPanel>
+                    <StackPanel Grid.Column="2"><TextBlock Text="Max memory (MB)" Style="{StaticResource Label}"/><TextBox x:Name="MaxMemBox"/></StackPanel>
+                    <StackPanel Grid.Column="4"><TextBlock Text="Max age (hours)" Style="{StaticResource Label}"/><TextBox x:Name="MaxAgeBox"/></StackPanel>
+                </Grid>
+                <TextBlock x:Name="UsageText" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+
+                <!-- Behaviour -->
+                <TextBlock Text="Behavior" Style="{StaticResource Section}"/>
+                <CheckBox x:Name="MergeDupes" Content="Merge duplicates (copying the same thing again just moves it to the top)"/>
+                <CheckBox x:Name="ExplorerSave" Content="Clicking an image while a File Explorer folder is focused saves it there as a PNG file"/>
+                <CheckBox x:Name="StartWithWindows" Content="Start with Windows"/>
+                <TextBlock Text="Theme" Style="{StaticResource Label}"/>
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="ThemeSystem" Content="Follow Windows" GroupName="theme" Margin="0,3,18,3"/>
+                    <RadioButton x:Name="ThemeDark" Content="Dark" GroupName="theme" Margin="0,3,18,3"/>
+                    <RadioButton x:Name="ThemeLight" Content="Light" GroupName="theme" Margin="0,3,0,3"/>
+                </StackPanel>
+
+                <!-- Privacy -->
+                <TextBlock Text="Privacy &amp; security" Style="{StaticResource Section}"/>
+                <CheckBox x:Name="EncryptBox" Content="Encrypt stored history (AES-256, key protected by your Windows account)"/>
+                <CheckBox x:Name="SkipFlagBox" Content="Ignore copies that password managers mark as private"/>
+                <TextBlock Text="When something looks like a password, API key or card number:" Style="{StaticResource Label}"/>
+                <RadioButton x:Name="SensOff" Content="Treat it like any other item" GroupName="sens"/>
+                <RadioButton x:Name="SensSkip" Content="Don't record it at all" GroupName="sens"/>
+                <RadioButton x:Name="SensWipe" Content="Record it hidden, and delete it automatically after:" GroupName="sens"/>
+                <StackPanel Orientation="Horizontal" Margin="22,4,0,0">
+                    <TextBox x:Name="WipeSecondsBox" Width="70"/>
+                    <TextBlock Text="seconds" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </StackPanel>
+                <TextBlock Text="Never record copies from these apps (process names, one per line)" Style="{StaticResource Label}" Margin="0,14,0,3"/>
+                <TextBox x:Name="ExcludedBox" AcceptsReturn="True" Height="110" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto"/>
+                <TextBlock Style="{StaticResource Hint}" Text="Tip: the “App” filter in the panel shows the exact process names Advanced Clipboard has seen."/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="1" BorderBrush="{DynamicResource BorderBrushX}" BorderThickness="0,1,0,0" Padding="22,12">
+            <DockPanel>
+                <TextBlock x:Name="ErrorText" Foreground="{DynamicResource DangerBrush}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="280"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <Button Content="Cancel" Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Click="Cancel_Click"/>
+                    <Button Content="Save" Style="{StaticResource AccentButton}" Click="Save_Click"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

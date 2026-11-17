@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="BgColor">#FF202020</Color>
+    <SolidColorBrush x:Key="BgBrush" Color="#FF202020"/>
+    <SolidColorBrush x:Key="CardBrush" Color="#FF2D2D2D"/>
+    <SolidColorBrush x:Key="CardHoverBrush" Color="#FF383838"/>
+    <SolidColorBrush x:Key="InputBrush" Color="#FF2B2B2B"/>
+    <SolidColorBrush x:Key="TextBrush" Color="#FFF3F3F3"/>
+    <SolidColorBrush x:Key="SubTextBrush" Color="#FF9E9E9E"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="#FF60CDFF"/>
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#FF003A52"/>
+    <SolidColorBrush x:Key="BorderBrushX" Color="#FF3F3F3F"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#FFFF6B6B"/>
+</ResourceDictionary>
