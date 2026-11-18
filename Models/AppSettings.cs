@@ -31,7 +31,7 @@ public sealed class AppSettings
 
     // Behaviour
     public bool MergeDuplicates { get; set; } = true;
-    public bool AutoPinNotes { get; set; } = true;
+    public bool AutoPinNotes { get; set; } = false;
     public bool ExplorerImageSave { get; set; } = true;
 
     // Link previews contact the website of each copied link, so they are opt-in.

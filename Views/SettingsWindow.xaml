@@ -64,7 +64,9 @@
                 <RadioButton x:Name="PinTop" Content="Show pinned items at the top of the history tab" GroupName="pin"/>
                 <RadioButton x:Name="PinBottom" Content="Show pinned items at the bottom of the history tab" GroupName="pin"/>
                 <RadioButton x:Name="PinTab" Content="Show pinned items in a separate “Pinned” tab" GroupName="pin"/>
-                <CheckBox x:Name="AutoPinNotes" Content="Automatically pin quick notes I write"/>
+                <CheckBox x:Name="AutoPinNotes" Content="Automatically pin new quick notes"/>
+                <TextBlock Style="{StaticResource Hint}" Margin="22,0,0,4"
+                           Text="Off: notes are temporary like any other item (they can be removed by the limits below or Clear all) until you pin them yourself."/>
 
                 <!-- Temp -->
                 <TextBlock Text="Temporary history limits" Style="{StaticResource Section}"/>
