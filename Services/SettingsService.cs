@@ -3,10 +3,10 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using AdvancedClipboard.Models;
+using Clipbook.Models;
 using Microsoft.Win32;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 public static class SettingsService
 {
@@ -74,7 +74,7 @@ public static class SettingsService
 public static class StartupService
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "AdvancedClipboard";
+    private const string ValueName = "Clipbook";
 
     public static void Set(bool enabled)
     {
@@ -82,6 +82,7 @@ public static class StartupService
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
             if (key == null) return;
+            key.DeleteValue("AdvancedClipboard", throwOnMissingValue: false);   // old name of this app
             if (enabled)
             {
                 var exe = Environment.ProcessPath;

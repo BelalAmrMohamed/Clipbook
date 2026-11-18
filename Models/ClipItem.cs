@@ -1,10 +1,12 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using AdvancedClipboard.Services;
+using Clipbook.Services;
 
-namespace AdvancedClipboard.Models;
+namespace Clipbook.Models;
 
 public enum ClipType { Text = 0, Link = 1, Image = 2, Files = 3, Note = 4 }
 
@@ -46,6 +48,14 @@ public sealed class ClipItem : INotifyPropertyChanged
         set { _collection = value; OnChanged(); OnChanged(nameof(Meta)); }
     }
 
+    private int _queuePosition;
+    /// <summary>1-based position in the paste queue, or 0 when not queued.</summary>
+    public int QueuePosition
+    {
+        get => _queuePosition;
+        set { _queuePosition = value; OnChanged(); OnChanged(nameof(Meta)); }
+    }
+
     // ---- UI helpers ----
 
     public bool IsImage => Type == ClipType.Image;
@@ -78,6 +88,7 @@ public sealed class ClipItem : INotifyPropertyChanged
             parts.Add(TimeAgo(CreatedUtc));
             if (!string.IsNullOrEmpty(Collection)) parts.Add("📂 " + Collection);
             if (Sensitive) parts.Add("🛡 sensitive");
+            if (QueuePosition > 0) parts.Add("⏭ queue #" + QueuePosition);
             return string.Join("  •  ", parts);
         }
     }
@@ -85,18 +96,89 @@ public sealed class ClipItem : INotifyPropertyChanged
     private BitmapSource? _thumb;
     public BitmapSource? Thumbnail => _thumb ??= ImageStore.LoadThumbnail(ImageFile);
 
+    // ---- Colour swatch (for text like #ff8800 or rgb(10, 20, 30)) ----
+
+    private bool _colorChecked;
+    private SolidColorBrush? _colorBrush;
+
+    public SolidColorBrush? ColorSwatch
+    {
+        get
+        {
+            if (!_colorChecked)
+            {
+                _colorChecked = true;
+                if (!Sensitive && Type is ClipType.Text or ClipType.Note && ColorParser.TryParse(Text, out var c))
+                {
+                    _colorBrush = new SolidColorBrush(c);
+                    _colorBrush.Freeze();
+                }
+            }
+            return _colorBrush;
+        }
+    }
+
+    public bool HasColor => ColorSwatch != null;
+
+    // ---- Link title (fetched on demand, only if enabled in Settings) ----
+
+    private string? _linkTitle;
+    private bool _linkRequested;
+
+    public string? LinkTitle
+    {
+        get
+        {
+            if (Type != ClipType.Link || Sensitive || !SettingsService.Current.FetchLinkTitles || string.IsNullOrWhiteSpace(Text))
+                return null;
+            if (_linkTitle == null && !_linkRequested)
+            {
+                _linkRequested = true;
+                var url = Text.Trim();
+                var cached = LinkPreviewService.TryGetCached(url);
+                if (cached != null) _linkTitle = cached.Length > 0 ? cached : null;
+                else _ = LoadLinkTitleAsync(url);
+            }
+            return _linkTitle;
+        }
+    }
+
+    public bool HasLinkTitle => LinkTitle != null;
+
+    private async Task LoadLinkTitleAsync(string url)
+    {
+        var title = await LinkPreviewService.FetchTitleAsync(url);
+        if (string.IsNullOrEmpty(title)) return;
+        _linkTitle = title;
+        OnChanged(nameof(LinkTitle));
+        OnChanged(nameof(HasLinkTitle));
+    }
+
     public void RaiseTimeChanged() => OnChanged(nameof(Meta));
 
     public void RaiseTextChanged()
     {
+        _colorChecked = false;
+        _colorBrush = null;
+        _linkTitle = null;
+        _linkRequested = false;
         OnChanged(nameof(DisplayText));
         OnChanged(nameof(Meta));
+        OnChanged(nameof(ColorSwatch));
+        OnChanged(nameof(HasColor));
+        OnChanged(nameof(LinkTitle));
+        OnChanged(nameof(HasLinkTitle));
     }
 
     public void RaiseSensitiveChanged()
     {
+        _colorChecked = false;
         OnChanged(nameof(DisplayText));
         OnChanged(nameof(Meta));
+        OnChanged(nameof(ColorSwatch));
+        OnChanged(nameof(HasColor));
+        OnChanged(nameof(LinkTitle));
+        OnChanged(nameof(HasLinkTitle));
     }
 
     public static string TimeAgo(DateTime utc)

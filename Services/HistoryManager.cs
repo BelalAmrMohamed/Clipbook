@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Windows.Threading;
-using AdvancedClipboard.Models;
+using Clipbook.Models;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 public enum HistoryTab { History, Pinned }
 
@@ -16,6 +16,12 @@ public sealed class HistoryManager
     private readonly DispatcherTimer _timer;
 
     public event Action? Changed;
+
+    /// <summary>Raised after something was copied (new or merged duplicate). Used by the paste queue.</summary>
+    public event Action<ClipItem>? ItemCaptured;
+
+    /// <summary>Raised when an item leaves the history (deleted, cleared or expired).</summary>
+    public event Action<ClipItem>? ItemRemoved;
 
     public HistoryManager(Repository repo)
     {
@@ -67,6 +73,7 @@ public sealed class HistoryManager
                 _repo.Update(existing);
                 EnforceLimits();
                 Changed?.Invoke();
+                ItemCaptured?.Invoke(existing);
                 return;
             }
         }
@@ -75,6 +82,7 @@ public sealed class HistoryManager
         _items.Insert(0, item);
         EnforceLimits();
         Changed?.Invoke();
+        ItemCaptured?.Invoke(item);
     }
 
     public ClipItem? AddNote(string text)
@@ -143,6 +151,7 @@ public sealed class HistoryManager
         _items.Remove(item);
         _repo.Delete(item.Id);
         ImageStore.Delete(item.ImageFile);
+        ItemRemoved?.Invoke(item);
         Changed?.Invoke();
     }
 
@@ -152,6 +161,7 @@ public sealed class HistoryManager
         {
             ImageStore.Delete(i.ImageFile);
             _items.Remove(i);
+            ItemRemoved?.Invoke(i);
         }
         _repo.DeleteAllUnpinned();
         Changed?.Invoke();
@@ -262,6 +272,41 @@ public sealed class HistoryManager
         _items.Remove(item);
         _repo.Delete(item.Id);
         ImageStore.Delete(item.ImageFile);
+        ItemRemoved?.Invoke(item);
+    }
+
+    // ---------------- Backup support ----------------
+
+    /// <summary>A copy of the current items (newest first), for export.</summary>
+    public List<ClipItem> Snapshot() => _items.ToList();
+
+    /// <summary>
+    /// Adds items from a backup. Anything already in the history (same content) is skipped, but a duplicate
+    /// can still gain pin/collection info from the backup.
+    /// </summary>
+    public (int Added, int Skipped) ImportItems(IEnumerable<ClipItem> incoming)
+    {
+        int added = 0, skipped = 0;
+        foreach (var item in incoming.OrderBy(i => i.CreatedUtc))
+        {
+            var dup = _items.FirstOrDefault(i => i.Type == item.Type &&
+                (item.Type == ClipType.Note ? i.Text == item.Text : i.Hash == item.Hash));
+            if (dup != null)
+            {
+                if (item.Pinned && !dup.Pinned) { dup.Pinned = true; dup.ExpiresUtc = null; _repo.Update(dup); }
+                if (item.Collection != null && dup.Collection == null) { dup.Collection = item.Collection; _repo.Update(dup); }
+                if (item.Type == ClipType.Image) ImageStore.Delete(item.ImageFile);
+                skipped++;
+                continue;
+            }
+            _repo.Insert(item);
+            _items.Add(item);
+            added++;
+        }
+        _items.Sort((a, b) => b.CreatedUtc.CompareTo(a.CreatedUtc));
+        EnforceLimits();
+        Changed?.Invoke();
+        return (added, skipped);
     }
 
     /// <summary>Total size in bytes of non-pinned items (for the settings page).</summary>

@@ -1,7 +1,7 @@
-<Window x:Class="AdvancedClipboard.PromptWindow"
+<Window x:Class="Clipbook.PromptWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Advanced Clipboard" Width="420" SizeToContent="Height"
+        Title="Clipbook" Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
         Background="{DynamicResource BgBrush}">
     <StackPanel Margin="16">

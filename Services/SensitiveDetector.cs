@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 /// <summary>Heuristics for text that probably should not live in a clipboard history.</summary>
 public static class SensitiveDetector

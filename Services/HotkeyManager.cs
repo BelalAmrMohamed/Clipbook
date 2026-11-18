@@ -4,19 +4,27 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
 using System.Windows.Interop;
-using AdvancedClipboard.Native;
+using Clipbook.Native;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 public readonly record struct Hotkey(bool Ctrl, bool Alt, bool Shift, bool Win, int Vk)
 {
     public bool IsValid => Vk != 0;
 
-    public static Hotkey Parse(string? text)
+    public static Hotkey Parse(string? text) =>
+        TryParseStrict(text, out var hotkey, out _) ? hotkey : default;
+
+    /// <summary>Strict parser used by Settings for live validation (also used at runtime).</summary>
+    public static bool TryParseStrict(string? text, out Hotkey hotkey, out string error)
     {
-        if (string.IsNullOrWhiteSpace(text)) return default;
+        hotkey = default;
+        error = "";
+        if (string.IsNullOrWhiteSpace(text)) { error = "Enter a hotkey, for example Ctrl+Shift+V."; return false; }
+
         bool ctrl = false, alt = false, shift = false, win = false;
         int vk = 0;
+        string? keyName = null;
         foreach (var raw in text.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             switch (raw.ToLowerInvariant())
@@ -26,12 +34,27 @@ public readonly record struct Hotkey(bool Ctrl, bool Alt, bool Shift, bool Win, 
                 case "shift": shift = true; break;
                 case "win": case "windows": case "meta": win = true; break;
                 default:
-                    if (Enum.TryParse<Key>(raw, true, out var key))
-                        vk = KeyInterop.VirtualKeyFromKey(key);
+                    if (keyName != null)
+                    {
+                        error = $"Only one main key is allowed (found \u201c{keyName}\u201d and \u201c{raw}\u201d).";
+                        return false;
+                    }
+                    if (!Enum.TryParse<Key>(raw, true, out var key) || !Enum.IsDefined(typeof(Key), key) || key == Key.None)
+                    {
+                        error = $"\u201c{raw}\u201d is not a key name I recognise. Use letters, digits, F1\u2013F12, etc.";
+                        return false;
+                    }
+                    keyName = raw;
+                    vk = KeyInterop.VirtualKeyFromKey(key);
                     break;
             }
         }
-        return new Hotkey(ctrl, alt, shift, win, vk);
+
+        if (vk == 0) { error = "Add a main key, for example Win+V."; return false; }
+        if (!(ctrl || alt || shift || win)) { error = "Add a modifier: Ctrl, Alt, Shift or Win."; return false; }
+
+        hotkey = new Hotkey(ctrl, alt, shift, win, vk);
+        return true;
     }
 
     public uint Modifiers =>
@@ -58,7 +81,7 @@ public sealed class HotkeyManager : IDisposable
 
     public void Initialize()
     {
-        _source = new HwndSource(new HwndSourceParameters("AdvancedClipboardHotkeys") { ParentWindow = new IntPtr(-3) });
+        _source = new HwndSource(new HwndSourceParameters("ClipbookHotkeys") { ParentWindow = new IntPtr(-3) });
         _source.AddHook(WndProc);
     }
 

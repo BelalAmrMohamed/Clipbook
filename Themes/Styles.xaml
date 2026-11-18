@@ -46,10 +46,44 @@
         <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}"/>
         <Setter Property="Template">
             <Setter.Value>
+                <!-- Note: TextBox applies its own Padding to the content host, so the host must NOT also get a Margin
+                     (that doubled the padding and pushed the caret away from the placeholder). The placeholder
+                     (taken from the Tag property) uses the same Padding, so it lines up exactly with typed text. -->
                 <ControlTemplate TargetType="TextBox">
                     <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
-                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                        <Grid>
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            <TextBlock x:Name="placeholder" Text="{TemplateBinding Tag}" IsHitTestVisible="False" Visibility="Collapsed"
+                                       Foreground="{DynamicResource SubTextBrush}" Margin="{TemplateBinding Padding}"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Top"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="placeholder" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="PasswordBox">
+        <Setter Property="Background" Value="{DynamicResource InputBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushX}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,6"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocused" Value="True">
@@ -80,19 +114,87 @@
     </Style>
 
     <Style TargetType="ContextMenu">
-        <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushX}"/>
+        <Setter Property="HasDropShadow" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrushX}"
+                            BorderThickness="1" CornerRadius="8" Padding="3" Margin="0" MinWidth="170">
+                        <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="MenuItem">
-        <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="8,6,12,6"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="4" Margin="1" Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="22"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="check" Text="&#xE73E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
+                                       Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                            <TextBlock x:Name="arrow" Grid.Column="2" Text="&#xE76C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10"
+                                       Foreground="{DynamicResource SubTextBrush}" Margin="16,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="-2" VerticalOffset="-4" AllowsTransparency="True" Focusable="False"
+                                   IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" PopupAnimation="Fade">
+                                <Border Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrushX}" BorderThickness="1"
+                                        CornerRadius="8" Padding="3" Margin="0,0,8,8" MinWidth="170">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.4"/>
+                                    </Border.Effect>
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="check" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="HasItems" Value="True">
+                            <Setter TargetName="arrow" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource CardHoverBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
-    <Style TargetType="Separator">
-        <Setter Property="Background" Value="{DynamicResource BorderBrushX}"/>
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Margin="8,4" Background="{DynamicResource BorderBrushX}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
+
+
+
+
 
     <!-- Thin scrollbar -->
     <Style TargetType="ScrollBar">

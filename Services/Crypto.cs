@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 /// <summary>
 /// AES-GCM encryption with a random 256-bit key that is itself protected by Windows DPAPI

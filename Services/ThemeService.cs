@@ -1,9 +1,9 @@
 using System;
 using System.Windows;
-using AdvancedClipboard.Models;
+using Clipbook.Models;
 using Microsoft.Win32;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 public static class ThemeService
 {

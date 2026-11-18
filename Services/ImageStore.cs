@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Windows.Media.Imaging;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 /// <summary>Stores clipboard images as (optionally encrypted) PNG blobs in the data folder.</summary>
 public static class ImageStore

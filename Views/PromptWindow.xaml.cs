@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace AdvancedClipboard;
+namespace Clipbook;
 
 public partial class PromptWindow : Window
 {
@@ -61,7 +61,7 @@ public partial class PromptWindow : Window
     }
 
     public static string? Ask(string prompt, string initial = "", IEnumerable<string>? suggestions = null,
-                              string title = "Advanced Clipboard", bool multiline = false)
+                              string title = "Clipbook", bool multiline = false)
     {
         var w = new PromptWindow(prompt, initial, suggestions, title, multiline);
         return w.ShowDialog() == true ? w.Result : null;

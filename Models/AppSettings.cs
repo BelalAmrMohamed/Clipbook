@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace AdvancedClipboard.Models;
+namespace Clipbook.Models;
 
 public enum PinPlacement { Top, Bottom, SeparateTab }
 public enum ThemeMode { System, Dark, Light }
@@ -12,6 +12,8 @@ public sealed class AppSettings
     public string PanelHotkey { get; set; } = "Win+V";
     public string FallbackHotkey { get; set; } = "Ctrl+Shift+V";
     public string PlainPasteHotkey { get; set; } = "Ctrl+Alt+V";
+    public string QueueHotkey { get; set; } = "Ctrl+Alt+B";              // paste the next item from the queue
+    public string QueueToggleHotkey { get; set; } = "Ctrl+Alt+Shift+B"; // start/stop collecting copies into the queue
 
     // General
     public ThemeMode Theme { get; set; } = ThemeMode.System;
@@ -23,10 +25,17 @@ public sealed class AppSettings
     public int MaxTempMemoryMb { get; set; } = 200;
     public int MaxTempAgeHours { get; set; } = 0;
 
+    // Panel size (remembered when you resize the panel)
+    public double PanelWidth { get; set; } = 400;
+    public double PanelHeight { get; set; } = 540;
+
     // Behaviour
     public bool MergeDuplicates { get; set; } = true;
     public bool AutoPinNotes { get; set; } = true;
     public bool ExplorerImageSave { get; set; } = true;
+
+    // Link previews contact the website of each copied link, so they are opt-in.
+    public bool FetchLinkTitles { get; set; } = false;
 
     // Privacy
     public SensitiveMode SensitiveMode { get; set; } = SensitiveMode.AutoWipe;

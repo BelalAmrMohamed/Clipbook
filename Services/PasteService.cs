@@ -5,10 +5,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using AdvancedClipboard.Models;
-using AdvancedClipboard.Native;
+using Clipbook.Models;
+using Clipbook.Native;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 public sealed class PasteService
 {
@@ -54,6 +54,23 @@ public sealed class PasteService
         await RestoreFocusAndSendPasteAsync();
     }
 
+    /// <summary>
+    /// Pastes several items one after another into the window that was focused when the panel opened (or the hotkey was
+    /// pressed). If <paramref name="separatorVk"/> is given (e.g. Enter or Tab), that key is pressed between text items,
+    /// which is handy for filling forms.
+    /// </summary>
+    public async Task PasteSequenceAsync(System.Collections.Generic.IReadOnlyList<ClipItem> items, ushort? separatorVk)
+    {
+        for (int i = 0; i < items.Count; i++)
+        {
+            await ActivateAsync(items[i]);
+            if (i == items.Count - 1) break;
+            await Task.Delay(280);   // let the target app finish handling the paste
+            if (separatorVk.HasValue && items[i].IsTextual) SendKeyPress(separatorVk.Value);
+            await Task.Delay(140);
+        }
+    }
+
     /// <summary>Copies only (no paste keystroke).</summary>
     public bool CopyOnly(ClipItem item, bool plainText = false) => SetClipboard(item, plainText);
 
@@ -66,7 +83,7 @@ public sealed class PasteService
             var png = ImageStore.LoadBytes(item.ImageFile);
             if (png == null || !Directory.Exists(folder)) return null;
 
-            var baseName = $"Clipboard_{DateTime.Now:yyyy-MM-dd_HHmmss}";
+            var baseName = $"Clipbook_{DateTime.Now:yyyy-MM-dd_HHmmss}";
             var path = Path.Combine(folder, baseName + ".png");
             for (int n = 2; File.Exists(path); n++)
                 path = Path.Combine(folder, $"{baseName}_{n}.png");
@@ -161,7 +178,21 @@ public sealed class PasteService
         var keys = new[] { NativeMethods.VK_LWIN, NativeMethods.VK_RWIN, NativeMethods.VK_MENU, NativeMethods.VK_SHIFT };
         var list = keys.Where(k => (NativeMethods.GetAsyncKeyState(k) & 0x8000) != 0).ToArray();
         if (list.Length == 0) return;
+
+        // Releasing Alt or Win on its own would open the window menu / Start menu, so press a harmless unassigned
+        // key first (Windows only treats a lone Alt/Win press-and-release as a menu trigger).
+        if (list.Any(k => k == NativeMethods.VK_LWIN || k == NativeMethods.VK_RWIN || k == NativeMethods.VK_MENU))
+        {
+            var dummy = new[] { Key(0xE8, false), Key(0xE8, true) };
+            NativeMethods.SendInput((uint)dummy.Length, dummy, Marshal.SizeOf<NativeMethods.INPUT>());
+        }
         var inputs = list.Select(k => Key((ushort)k, true)).ToArray();
+        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
+    public static void SendKeyPress(ushort vk)
+    {
+        var inputs = new[] { Key(vk, false), Key(vk, true) };
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 

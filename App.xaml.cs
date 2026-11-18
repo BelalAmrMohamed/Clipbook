@@ -4,10 +4,10 @@ using System.Drawing.Drawing2D;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
-using AdvancedClipboard.Models;
-using AdvancedClipboard.Services;
+using Clipbook.Models;
+using Clipbook.Services;
 
-namespace AdvancedClipboard;
+namespace Clipbook;
 
 public partial class App : System.Windows.Application
 {
@@ -16,21 +16,23 @@ public partial class App : System.Windows.Application
     private HistoryManager _history = null!;
     private ClipboardMonitor _monitor = null!;
     private PasteService _paste = null!;
+    private PasteQueue _queue = null!;
     private HotkeyManager _hotkeys = null!;
     private MainWindow? _panel;
     private System.Windows.Forms.NotifyIcon _tray = null!;
     private System.Windows.Forms.ToolStripMenuItem _pauseItem = null!;
+    private System.Windows.Forms.ToolStripMenuItem _collectItem = null!;
     private SettingsWindow? _settingsWindow;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        _singleInstance = new Mutex(true, @"Local\AdvancedClipboard.SingleInstance", out bool isNew);
+        _singleInstance = new Mutex(true, @"Local\Clipbook.SingleInstance", out bool isNew);
         if (!isNew)
         {
-            System.Windows.MessageBox.Show("Advanced Clipboard is already running. Look for its icon in the system tray.",
-                "Advanced Clipboard", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show("Clipbook is already running. Look for its icon in the system tray.",
+                "Clipbook", MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
         }
@@ -42,6 +44,7 @@ public partial class App : System.Windows.Application
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) => AppPaths.Log("Fatal: " + args.ExceptionObject);
 
+        AppPaths.MigrateLegacyData();
         SettingsService.Load();
         ThemeService.Apply(SettingsService.Current.Theme);
         StartupService.Set(SettingsService.Current.StartWithWindows);
@@ -52,6 +55,8 @@ public partial class App : System.Windows.Application
         _monitor.Start();
         _paste = new PasteService(_monitor);
         _paste.Notify += msg => Dispatcher.BeginInvoke(new Action(() => ShowBalloon(msg)));
+        _queue = new PasteQueue(_history);
+        _queue.Changed += UpdateTrayState;
 
         _hotkeys = new HotkeyManager();
         _hotkeys.Initialize();
@@ -68,7 +73,7 @@ public partial class App : System.Windows.Application
 
     // ---------------- Panel ----------------
 
-    private MainWindow Panel => _panel ??= new MainWindow(_history, _paste, _monitor, OpenSettings);
+    private MainWindow Panel => _panel ??= new MainWindow(_history, _paste, _monitor, _queue, OpenSettings);
 
     private void TogglePanel()
     {
@@ -89,6 +94,29 @@ public partial class App : System.Windows.Application
             _ = _paste.PasteAsync(item, plainText: true);
         }
         catch (Exception ex) { AppPaths.Log("Plain paste failed: " + ex.Message); }
+    }
+
+    // ---------------- Paste queue ----------------
+
+    private void PasteNextFromQueue()
+    {
+        var item = _queue.Dequeue();
+        if (item == null)
+        {
+            ShowBalloon($"The paste queue is empty. Start collecting ({SettingsService.Current.QueueToggleHotkey}), copy a few things, then press {SettingsService.Current.QueueHotkey} to paste them one by one.");
+            return;
+        }
+        _paste.CaptureTarget();
+        _ = _paste.ActivateAsync(item);
+        if (_queue.Count == 0) ShowBalloon("That was the last item in the queue.");
+    }
+
+    private void ToggleQueueCollecting()
+    {
+        _queue.ToggleCollecting();
+        ShowBalloon(_queue.Collecting
+            ? $"Collecting: everything you copy is added to the queue. Press {SettingsService.Current.QueueHotkey} to paste the next item."
+            : $"Stopped collecting. {_queue.Count} item(s) in the queue.");
     }
 
     private void OpenSettings()
@@ -114,11 +142,15 @@ public partial class App : System.Windows.Application
 
         if (!string.IsNullOrWhiteSpace(s.PlainPasteHotkey))
             _hotkeys.Register(s.PlainPasteHotkey, PastePlainFromCurrentClipboard);
+        if (!string.IsNullOrWhiteSpace(s.QueueHotkey))
+            _hotkeys.Register(s.QueueHotkey, PasteNextFromQueue);
+        if (!string.IsNullOrWhiteSpace(s.QueueToggleHotkey))
+            _hotkeys.Register(s.QueueToggleHotkey, ToggleQueueCollecting);
 
         if (!announce) return;
 
         if (primaryOk)
-            ShowBalloon($"Advanced Clipboard is running. Press {s.PanelHotkey} to open.");
+            ShowBalloon($"Clipbook is running. Press {s.PanelHotkey} to open.");
         else if (fallbackOk)
             ShowBalloon($"{s.PanelHotkey} is unavailable, so {s.FallbackHotkey} was used instead.");
         else
@@ -130,14 +162,21 @@ public partial class App : System.Windows.Application
     private void BuildTray()
     {
         var menu = new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add("Open clipboard", null, (_, _) => Dispatcher.BeginInvoke(new Action(TogglePanel)));
+        menu.Items.Add("Open Clipbook", null, (_, _) => Dispatcher.BeginInvoke(new Action(TogglePanel)));
         _pauseItem = new System.Windows.Forms.ToolStripMenuItem("Pause recording") { CheckOnClick = true };
         _pauseItem.CheckedChanged += (_, _) =>
         {
             _monitor.Paused = _pauseItem.Checked;
-            _tray.Text = _pauseItem.Checked ? "Advanced Clipboard (paused)" : "Advanced Clipboard";
+            UpdateTrayState();
         };
         menu.Items.Add(_pauseItem);
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        _collectItem = new System.Windows.Forms.ToolStripMenuItem("Collect copies into paste queue");
+        _collectItem.Click += (_, _) => Dispatcher.BeginInvoke(new Action(() => _queue.ToggleCollecting()));
+        menu.Items.Add(_collectItem);
+        menu.Items.Add("Paste next from queue", null, (_, _) => Dispatcher.BeginInvoke(new Action(PasteNextFromQueue)));
+        menu.Items.Add("Clear paste queue", null, (_, _) => Dispatcher.BeginInvoke(new Action(() => _queue.Clear())));
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add("Settings…", null, (_, _) => Dispatcher.BeginInvoke(new Action(OpenSettings)));
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => Dispatcher.BeginInvoke(new Action(Shutdown)));
@@ -145,7 +184,7 @@ public partial class App : System.Windows.Application
         _tray = new System.Windows.Forms.NotifyIcon
         {
             Icon = CreateIcon(),
-            Text = "Advanced Clipboard",
+            Text = "Clipbook",
             Visible = true,
             ContextMenuStrip = menu
         };
@@ -156,9 +195,20 @@ public partial class App : System.Windows.Application
         };
     }
 
+    private void UpdateTrayState()
+    {
+        if (_tray == null || _collectItem == null) return;
+        _collectItem.Checked = _queue.Collecting;
+        var text = "Clipbook";
+        if (_pauseItem.Checked) text += " (paused)";
+        if (_queue.Collecting) text += " · collecting";
+        if (_queue.Count > 0) text += $" · queue {_queue.Count}";
+        _tray.Text = text.Length > 63 ? text.Substring(0, 63) : text;
+    }
+
     private void ShowBalloon(string text)
     {
-        try { _tray.ShowBalloonTip(2500, "Advanced Clipboard", text, System.Windows.Forms.ToolTipIcon.None); }
+        try { _tray.ShowBalloonTip(2500, "Clipbook", text, System.Windows.Forms.ToolTipIcon.None); }
         catch { /* ignore */ }
     }
 

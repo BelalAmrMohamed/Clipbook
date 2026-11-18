@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 public static class TextTools
 {

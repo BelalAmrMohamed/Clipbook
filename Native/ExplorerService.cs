@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using AdvancedClipboard.Services;
+using Clipbook.Services;
 
-namespace AdvancedClipboard.Native;
+namespace Clipbook.Native;
 
 /// <summary>Finds which folder the foreground File Explorer window (or the Desktop) is showing.</summary>
 internal static class ExplorerService

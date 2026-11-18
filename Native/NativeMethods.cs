@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace AdvancedClipboard.Native;
+namespace Clipbook.Native;
 
 internal static class NativeMethods
 {
@@ -14,7 +14,7 @@ internal static class NativeMethods
     public const int WH_KEYBOARD_LL = 13;
     public const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
 
-    public const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_V = 0x56, VK_INSERT = 0x2D;
+    public const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_V = 0x56, VK_INSERT = 0x2D, VK_RETURN = 0x0D, VK_TAB = 0x09;
 
     public const uint INPUT_KEYBOARD = 1;
     public const uint KEYEVENTF_KEYUP = 0x2;

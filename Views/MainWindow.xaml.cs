@@ -7,17 +7,18 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using AdvancedClipboard.Models;
-using AdvancedClipboard.Native;
-using AdvancedClipboard.Services;
+using Clipbook.Models;
+using Clipbook.Native;
+using Clipbook.Services;
 
-namespace AdvancedClipboard;
+namespace Clipbook;
 
 public partial class MainWindow : Window
 {
     private readonly HistoryManager _history;
     private readonly PasteService _paste;
     private readonly ClipboardMonitor _monitor;
+    private readonly PasteQueue _queue;
     private readonly Action _openSettings;
 
     private bool _ready;
@@ -27,14 +28,26 @@ public partial class MainWindow : Window
     private string? _appFilter;
     private string? _collectionFilter;   // null = any, "" = none
 
-    public MainWindow(HistoryManager history, PasteService paste, ClipboardMonitor monitor, Action openSettings)
+    // The single input row is either the quick-note box or the search box.
+    private bool _searchMode;
+    private string _noteDraft = "";
+    private string SearchText => _searchMode ? InputBox.Text : "";
+
+    public MainWindow(HistoryManager history, PasteService paste, ClipboardMonitor monitor, PasteQueue queue, Action openSettings)
     {
         InitializeComponent();
+        var saved = SettingsService.Current;
+        Width = Math.Max(MinWidth, Math.Min(saved.PanelWidth, 1400));
+        Height = Math.Max(MinHeight, Math.Min(saved.PanelHeight, 1400));
         _history = history;
         _paste = paste;
         _monitor = monitor;
+        _queue = queue;
         _openSettings = openSettings;
         _ready = true;
+
+        _queue.Changed += UpdateQueueBar;
+        UpdateQueueBar();
 
         _history.Changed += () => { if (IsVisible) Refresh(); };
         SettingsService.Changed += ApplyPlacementSettings;
@@ -52,15 +65,33 @@ public partial class MainWindow : Window
         Show();
         Activate();
         Focus();
-        NoteBox.Focus();
+        InputBox.Focus();
         if (ItemsList.Items.Count > 0 && ItemsList.SelectedIndex < 0) ItemsList.SelectedIndex = 0;
     }
 
     public void HidePanel()
     {
         if (!IsVisible) return;
-        SearchBox.Clear();
+        if (_searchMode) ExitSearch(focusInput: false);
+        RememberSize();
         Hide();
+    }
+
+    private void RememberSize()
+    {
+        var cfg = SettingsService.Current;
+        if (Math.Abs(cfg.PanelWidth - ActualWidth) > 0.5 || Math.Abs(cfg.PanelHeight - ActualHeight) > 0.5)
+        {
+            cfg.PanelWidth = ActualWidth;
+            cfg.PanelHeight = ActualHeight;
+            SettingsService.Save();
+        }
+    }
+
+    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ButtonState != MouseButtonState.Pressed) return;
+        try { DragMove(); } catch (InvalidOperationException) { /* mouse was released already */ }
     }
 
     private void PositionNearCursor()
@@ -92,8 +123,12 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Escape)
         {
-            if (!string.IsNullOrEmpty(SearchBox.Text) && SearchBox.IsKeyboardFocused) SearchBox.Clear();
-            else HidePanel();
+            if (_searchMode) ExitSearch(); else HidePanel();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            EnterSearch();
             e.Handled = true;
         }
     }
@@ -101,7 +136,7 @@ public partial class MainWindow : Window
     private void ApplyPlacementSettings()
     {
         bool separate = SettingsService.Current.PinPlacement == PinPlacement.SeparateTab;
-        PinnedTabBtn.Visibility = separate ? Visibility.Visible : Visibility.Collapsed;
+        TabsPanel.Visibility = separate ? Visibility.Visible : Visibility.Collapsed;
         if (!separate && _tab == HistoryTab.Pinned)
         {
             _tab = HistoryTab.History;
@@ -116,7 +151,7 @@ public partial class MainWindow : Window
         if (!_ready) return;
         var selectedId = (ItemsList.SelectedItem as ClipItem)?.Id;
 
-        var list = _history.Query(_tab, SearchBox.Text, _typeFilter, _appFilter, _collectionFilter);
+        var list = _history.Query(_tab, SearchText, _typeFilter, _appFilter, _collectionFilter);
         ItemsList.ItemsSource = list;
         EmptyText.Visibility = list.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -143,48 +178,90 @@ public partial class MainWindow : Window
             FooterText.Text = $"{shown} item{(shown == 1 ? "" : "s")}  •  {_history.PinnedCount()} pinned";
     }
 
-    // ---------------- Quick note ----------------
+    // ---------------- Quick note / search (one shared input) ----------------
 
     private void SaveNote_Click(object sender, RoutedEventArgs e) => SaveNote();
 
-    private void NoteBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void SearchToggle_Click(object sender, RoutedEventArgs e)
     {
-        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        if (_searchMode) ExitSearch(); else EnterSearch();
+    }
+
+    private void EnterSearch()
+    {
+        if (_searchMode) return;
+        _noteDraft = InputBox.Text;           // keep the unsaved note so it comes back afterwards
+        _searchMode = true;
+        InputBox.Text = "";
+        InputBox.Tag = "Search Clipbook…  (Esc to cancel)";
+        SearchToggleIcon.Text = "\uE711";     // cancel (X)
+        SearchToggleIcon.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
+        SearchToggle.ToolTip = "Cancel search (Esc)";
+        SaveButton.Visibility = Visibility.Collapsed;
+        InputBox.Focus();
+        Refresh();
+    }
+
+    private void ExitSearch(bool focusInput = true)
+    {
+        if (!_searchMode) return;
+        _searchMode = false;
+        InputBox.Text = _noteDraft;
+        _noteDraft = "";
+        InputBox.Tag = "Write a quick note…  (Ctrl+Enter to save)";
+        SearchToggleIcon.Text = "\uE721";     // magnifier
+        SearchToggleIcon.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+        SearchToggle.ToolTip = "Search (Ctrl+F)";
+        SaveButton.Visibility = Visibility.Visible;
+        if (focusInput) { InputBox.Focus(); InputBox.CaretIndex = InputBox.Text.Length; }
+        Refresh();
+    }
+
+    private void InputBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_ready && _searchMode) Refresh();
+    }
+
+    private void InputBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+
+        if (e.Key == Key.Enter)
         {
-            SaveNote();
+            if (!_searchMode)
+            {
+                // Note mode: Enter = new line, Ctrl+Enter = save.
+                if (ctrl) { SaveNote(); e.Handled = true; }
+            }
+            else if (!shift && ItemsList.Items.Count > 0)
+            {
+                // Search mode: Enter = paste the selected (or first) result, Shift+Enter = new line.
+                var item = ItemsList.SelectedItem as ClipItem ?? ItemsList.Items[0] as ClipItem;
+                if (item != null) ActivateItem(item);
+                e.Handled = true;
+            }
+        }
+        else if (e.Key == Key.Down && (_searchMode || string.IsNullOrEmpty(InputBox.Text)) && ItemsList.Items.Count > 0)
+        {
+            if (ItemsList.SelectedIndex < 0) ItemsList.SelectedIndex = 0;
+            FocusSelected();
             e.Handled = true;
         }
     }
 
     private void SaveNote()
     {
-        var text = NoteBox.Text;
+        if (_searchMode) return;
+        var text = InputBox.Text;
         if (string.IsNullOrWhiteSpace(text)) return;
         _history.AddNote(text);
-        NoteBox.Clear();
+        InputBox.Clear();
         if (ItemsList.Items.Count > 0) ItemsList.ScrollIntoView(ItemsList.Items[0]);
-        NoteBox.Focus();
+        InputBox.Focus();
     }
 
-    // ---------------- Search / filters / tabs ----------------
-
-    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => Refresh();
-
-    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Down && ItemsList.Items.Count > 0)
-        {
-            if (ItemsList.SelectedIndex < 0) ItemsList.SelectedIndex = 0;
-            FocusSelected();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Enter && ItemsList.Items.Count > 0)
-        {
-            var item = ItemsList.SelectedItem as ClipItem ?? ItemsList.Items[0] as ClipItem;
-            if (item != null) ActivateItem(item);
-            e.Handled = true;
-        }
-    }
+    // ---------------- Filters / tabs ----------------
 
     private void TypeChip_Checked(object sender, RoutedEventArgs e)
     {
@@ -256,7 +333,7 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Delete) { DeleteAndKeepSelection(item); e.Handled = true; }
         else if (e.Key == Key.P && ctrl) { _history.TogglePin(item); e.Handled = true; }
         else if (e.Key == Key.C && ctrl) { _paste.CopyOnly(item); e.Handled = true; }
-        else if (e.Key == Key.Up && ItemsList.SelectedIndex == 0) { SearchBox.Focus(); e.Handled = true; }
+        else if (e.Key == Key.Up && ItemsList.SelectedIndex == 0) { InputBox.Focus(); e.Handled = true; }
     }
 
     private static ClipItem? ItemFromEvent(DependencyObject? source)
@@ -335,6 +412,10 @@ public partial class MainWindow : Window
         if (item.IsTextual && item.Type != ClipType.Files)
             menu.Items.Add(MakeItem("Paste as plain text", () => ActivateItem(item, plain: true)));
         menu.Items.Add(MakeItem("Copy", () => _paste.CopyOnly(item)));
+        menu.Items.Add(MakeItem(item.QueuePosition > 0 ? "Remove from paste queue" : "Add to paste queue",
+            () => { if (item.QueuePosition > 0) _queue.Remove(item); else _queue.Add(item); }));
+        if (item.IsImage)
+            menu.Items.Add(MakeItem("Copy text from image (OCR)", () => RunOcr(item)));
 
         if (item.IsImage && _paste.TargetFolder != null)
             menu.Items.Add(MakeItem("Save as file in current folder", () =>
@@ -393,6 +474,93 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
+    // ---------------- Paste queue ----------------
+
+    private void UpdateQueueBar()
+    {
+        bool show = _queue.Collecting || _queue.Count > 0;
+        QueueBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        QueueCollectBtn.Content = _queue.Collecting ? "■ Stop" : "● Collect";
+        QueueNextBtn.IsEnabled = _queue.Count > 0;
+
+        var next = _queue.Peek();
+        var status = _queue.Count == 0 ? "queue is empty" : $"{_queue.Count} queued · next: {PasteQueue.Preview(next!)}";
+        QueueText.Text = (_queue.Collecting ? "Collecting copies · " : "") + status;
+    }
+
+    private void Queue_Click(object sender, RoutedEventArgs e) => ShowQueueMenu((FrameworkElement)sender);
+    private void QueueMore_Click(object sender, RoutedEventArgs e) => ShowQueueMenu((FrameworkElement)sender);
+    private void QueueCollect_Click(object sender, RoutedEventArgs e) => _queue.ToggleCollecting();
+    private void QueueNext_Click(object sender, RoutedEventArgs e) => QueuePasteNext();
+
+    private void ShowQueueMenu(FrameworkElement target)
+    {
+        var menu = NewMenu();
+        menu.Items.Add(MakeItem(_queue.Collecting ? "Stop collecting copies" : "Start collecting copies into the queue",
+            () => _queue.ToggleCollecting()));
+        menu.Items.Add(new Separator());
+
+        var next = MakeItem("Paste next item", QueuePasteNext);
+        var all = MakeItem("Paste all, one after another", () => QueuePasteAll(null));
+        var allEnter = MakeItem("Paste all, pressing Enter between items", () => QueuePasteAll((ushort)NativeMethods.VK_RETURN));
+        var allTab = MakeItem("Paste all, pressing Tab between items", () => QueuePasteAll((ushort)NativeMethods.VK_TAB));
+        var clear = MakeItem("Clear the queue", () => _queue.Clear());
+        foreach (var mi in new[] { next, all, allEnter, allTab, clear }) mi.IsEnabled = _queue.Count > 0;
+        menu.Items.Add(next);
+        menu.Items.Add(all);
+        menu.Items.Add(allEnter);
+        menu.Items.Add(allTab);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(clear);
+        OpenMenu(menu, target);
+    }
+
+    private async void QueuePasteNext()
+    {
+        var item = _queue.Dequeue();
+        if (item == null) return;
+        HidePanel();
+        try { await _paste.ActivateAsync(item); }
+        catch (Exception ex) { AppPaths.Log("Queue paste failed: " + ex); }
+    }
+
+    private async void QueuePasteAll(ushort? separatorVk)
+    {
+        var items = _queue.DequeueAll();
+        if (items.Count == 0) return;
+        HidePanel();
+        try { await _paste.PasteSequenceAsync(items, separatorVk); }
+        catch (Exception ex) { AppPaths.Log("Queue paste-all failed: " + ex); }
+    }
+
+    // ---------------- OCR ----------------
+
+    private async void RunOcr(ClipItem item)
+    {
+        var png = ImageStore.LoadBytes(item.ImageFile);
+        if (png == null) { FooterText.Text = "Could not read that image."; return; }
+
+        FooterText.Text = "Reading text from the image…";
+        var result = await OcrService.RecognizeAsync(png);
+        if (result.Text == null)
+        {
+            FooterText.Text = result.Error ?? "No text found in that image.";
+            return;
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(result.Text);
+        _history.AddCaptured(new ClipItem
+        {
+            Type = ClipType.Text,
+            Text = result.Text,
+            SourceApp = "OCR",
+            Hash = "txt:" + Crypto.Hash(bytes),
+            SizeBytes = bytes.Length,
+            CreatedUtc = DateTime.UtcNow
+        });
+        FooterText.Text = $"Recognised {result.Text.Length} characters and added them as a new item.";
+    }
+
     // ---------------- Menu actions ----------------
 
     private void AssignCollection(ClipItem item)
@@ -444,7 +612,7 @@ public partial class MainWindow : Window
             var dlg = new Microsoft.Win32.SaveFileDialog
             {
                 Filter = "PNG image (*.png)|*.png",
-                FileName = $"Clipboard_{DateTime.Now:yyyy-MM-dd_HHmmss}.png"
+                FileName = $"Clipbook_{DateTime.Now:yyyy-MM-dd_HHmmss}.png"
             };
             if (dlg.ShowDialog(this) == true)
             {

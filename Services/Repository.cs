@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using AdvancedClipboard.Models;
+using Clipbook.Models;
 using Microsoft.Data.Sqlite;
 
-namespace AdvancedClipboard.Services;
+namespace Clipbook.Services;
 
 /// <summary>SQLite persistence. Text/HTML are stored as (optionally AES-GCM encrypted) blobs.</summary>
 public sealed class Repository
