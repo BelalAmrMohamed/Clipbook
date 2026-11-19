@@ -25,7 +25,9 @@ internal static class ExplorerService
 
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
 
-    private static readonly Guid SidTopLevelBrowser = new("4C96BE40-915C-11CF-99D3-00AA004AE837");
+    // SID_SShellBrowser: the shell browser of THIS view (one per tab). SID_STopLevelBrowser would return the
+    // window frame's browser, which is the same for every tab and therefore can't tell tabs apart.
+    private static readonly Guid SidShellBrowser = new("000214E2-0000-0000-C000-000000000046");
     private static readonly Guid IidShellBrowser = new("000214E2-0000-0000-C000-000000000046");
 
     public static string ClassOf(IntPtr hwnd)
@@ -56,7 +58,7 @@ internal static class ExplorerService
             dynamic shell = Activator.CreateInstance(type)!;
             dynamic windows = shell.Windows();
 
-            var candidates = new List<(string path, bool visibleTab)>();
+            var candidates = new List<(string path, bool? activeTab)>();
             int count = windows.Count;
             for (int i = 0; i < count; i++)
             {
@@ -77,8 +79,17 @@ internal static class ExplorerService
                 catch { /* some shell windows are not folder views */ }
             }
 
-            var active = candidates.Find(c => c.visibleTab);
-            var chosen = active.path ?? (candidates.Count > 0 ? candidates[0].path : null);
+            // One tab: that's the folder. Several tabs: use the one that is visible (the active tab).
+            // If we can't tell which tab is active, return null rather than guess: Clipbook then pastes the image
+            // normally instead of saving it into a folder the user isn't looking at.
+            string? chosen = null;
+            if (candidates.Count == 1) chosen = candidates[0].path;
+            else
+            {
+                var active = candidates.FindAll(c => c.activeTab == true);
+                if (active.Count == 1) chosen = active[0].path;
+                else AppPaths.Log($"Explorer: could not tell the active tab apart ({candidates.Count} tabs, {active.Count} look active).");
+            }
             return chosen != null && Directory.Exists(chosen) ? chosen : null;
         }
         catch (Exception ex)
@@ -88,20 +99,21 @@ internal static class ExplorerService
         }
     }
 
-    // Explorer on Windows 11 can host several tabs in one top-level window; the active tab's
-    // ShellTabWindowClass child is the visible one.
-    private static bool IsActiveTab(object shellWindow)
+    // Explorer on Windows 11 can host several tabs in one top-level window. Each tab has its own window
+    // (class ShellTabWindowClass); only the active tab's window is visible.
+    // Returns null if it can't be determined.
+    private static bool? IsActiveTab(object shellWindow)
     {
         try
         {
             var sp = (IServiceProviderCom)shellWindow;
-            var sid = SidTopLevelBrowser;
+            var sid = SidShellBrowser;
             var iid = IidShellBrowser;
-            if (sp.QueryService(ref sid, ref iid, out var browserObj) != 0 || browserObj == null) return true;
+            if (sp.QueryService(ref sid, ref iid, out var browserObj) != 0 || browserObj == null) return null;
             var browser = (IShellBrowserCom)browserObj;
-            if (browser.GetWindow(out var tabHwnd) != 0) return true;
+            if (browser.GetWindow(out var tabHwnd) != 0 || tabHwnd == IntPtr.Zero) return null;
             return IsWindowVisible(tabHwnd);
         }
-        catch { return true; }
+        catch { return null; }
     }
 }
